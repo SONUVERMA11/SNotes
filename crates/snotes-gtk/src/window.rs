@@ -1,6 +1,7 @@
-//! Main application window — fully wired up with all features
+//! Main application window — GoodNotes-style UI with full interactivity
 
 use gtk4::prelude::*;
+use gtk4::gio;
 use libadwaita as adw;
 use libadwaita::prelude::*;
 use std::cell::RefCell;
@@ -32,22 +33,16 @@ impl SNotesWindow {
         // Create canvas
         let (canvas, canvas_state) = canvas_widget::create_canvas_widget();
 
-        // Header bar
+        // ── Header bar ──
         let header = adw::HeaderBar::new();
-        let title = adw::WindowTitle::new("S Notes", "by Sonu Verma");
-        header.set_title_widget(Some(&title));
+        let title_widget = adw::WindowTitle::new("S Notes", "by Sonu Verma");
+        header.set_title_widget(Some(&title_widget));
 
-        // Undo/Redo buttons
+        // Undo button
         let undo_btn = gtk4::Button::builder()
             .icon_name("edit-undo-symbolic")
             .tooltip_text("Undo (Ctrl+Z)")
             .build();
-        let redo_btn = gtk4::Button::builder()
-            .icon_name("edit-redo-symbolic")
-            .tooltip_text("Redo (Ctrl+Shift+Z)")
-            .build();
-
-        // Wire undo
         let cs_undo = canvas_state.clone();
         let da_undo = canvas.clone();
         undo_btn.connect_clicked(move |_| {
@@ -55,7 +50,11 @@ impl SNotesWindow {
             da_undo.queue_draw();
         });
 
-        // Wire redo
+        // Redo button
+        let redo_btn = gtk4::Button::builder()
+            .icon_name("edit-redo-symbolic")
+            .tooltip_text("Redo (Ctrl+Shift+Z)")
+            .build();
         let cs_redo = canvas_state.clone();
         let da_redo = canvas.clone();
         redo_btn.connect_clicked(move |_| {
@@ -63,7 +62,19 @@ impl SNotesWindow {
             da_redo.queue_draw();
         });
 
-        // Clear all button
+        // Export button — opens a real save dialog
+        let export_btn = gtk4::Button::builder()
+            .icon_name("document-save-as-symbolic")
+            .tooltip_text("Export as PNG (Ctrl+Shift+E)")
+            .build();
+        let cs_export = canvas_state.clone();
+        let da_export = canvas.clone();
+        export_btn.connect_clicked(move |btn| {
+            let win = btn.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
+            export_canvas(&cs_export, &da_export, win.as_ref());
+        });
+
+        // Clear canvas button
         let clear_btn = gtk4::Button::builder()
             .icon_name("edit-clear-all-symbolic")
             .tooltip_text("Clear Canvas")
@@ -74,8 +85,16 @@ impl SNotesWindow {
             let mut s = cs_clear.borrow_mut();
             s.strokes.clear();
             s.splines.clear();
+            s.history.clear();
             da_clear.queue_draw();
         });
+
+        // Sidebar toggle
+        let sidebar_btn = gtk4::ToggleButton::builder()
+            .icon_name("sidebar-show-symbolic")
+            .tooltip_text("Toggle Sidebar (F9)")
+            .active(true)
+            .build();
 
         // Menu
         let menu_btn = gtk4::MenuButton::builder()
@@ -87,13 +106,15 @@ impl SNotesWindow {
         header.pack_start(&undo_btn);
         header.pack_start(&redo_btn);
         header.pack_end(&menu_btn);
+        header.pack_end(&export_btn);
         header.pack_end(&clear_btn);
+        header.pack_end(&sidebar_btn);
 
-        // Sidebar
-        let sidebar = build_sidebar(&canvas_state, &canvas);
+        // ── Sidebar ──
+        let sidebar = build_sidebar(&canvas_state, &canvas, &title_widget);
 
-        // Toolbar
-        let toolbar = build_toolbar(&canvas_state, &canvas);
+        // ── Toolbar ──
+        let (toolbar, zoom_label) = build_toolbar(&canvas_state, &canvas);
 
         // Main content: canvas + toolbar
         let content_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -104,11 +125,17 @@ impl SNotesWindow {
         let split_view = adw::OverlaySplitView::builder()
             .sidebar_position(gtk4::PackType::Start)
             .show_sidebar(true)
-            .min_sidebar_width(220.0)
+            .min_sidebar_width(230.0)
             .max_sidebar_width(350.0)
             .build();
         split_view.set_sidebar(Some(&sidebar));
         split_view.set_content(Some(&content_box));
+
+        // Wire sidebar toggle
+        let sv_ref = split_view.clone();
+        sidebar_btn.connect_toggled(move |btn| {
+            sv_ref.set_show_sidebar(btn.is_active());
+        });
 
         // Main layout
         let main_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
@@ -123,44 +150,63 @@ impl SNotesWindow {
             .content(&main_box)
             .build();
 
+        // ── Fullscreen action ──
+        let fullscreen_action = gio::SimpleAction::new("fullscreen", None);
+        let win_ref = window.clone();
+        fullscreen_action.connect_activate(move |_, _| {
+            if win_ref.is_fullscreen() {
+                win_ref.unfullscreen();
+            } else {
+                win_ref.fullscreen();
+            }
+        });
+        window.add_action(&fullscreen_action);
+
         // ── Keyboard shortcuts ──
         let key_ctrl = gtk4::EventControllerKey::new();
         let cs_key = canvas_state.clone();
         let da_key = canvas.clone();
+        let zl_key = zoom_label.clone();
         key_ctrl.connect_key_pressed(move |_ctrl, key, _code, modifier| {
             let ctrl = modifier.contains(gdk4::ModifierType::CONTROL_MASK);
             let shift = modifier.contains(gdk4::ModifierType::SHIFT_MASK);
             let mut s = cs_key.borrow_mut();
+            let mut handled = true;
 
             match key {
-                gdk4::Key::z if ctrl && !shift => { s.undo(); da_key.queue_draw(); return glib::Propagation::Stop; }
-                gdk4::Key::z if ctrl && shift => { s.redo(); da_key.queue_draw(); return glib::Propagation::Stop; }
-                gdk4::Key::Z if ctrl => { s.redo(); da_key.queue_draw(); return glib::Propagation::Stop; }
-                gdk4::Key::p | gdk4::Key::P => { s.current_tool = ToolType::Pen; da_key.queue_draw(); }
-                gdk4::Key::b | gdk4::Key::B => { s.current_tool = ToolType::Brush; da_key.queue_draw(); }
-                gdk4::Key::e | gdk4::Key::E => { s.current_tool = ToolType::Eraser; da_key.queue_draw(); }
-                gdk4::Key::h | gdk4::Key::H => { s.current_tool = ToolType::Highlighter; da_key.queue_draw(); }
-                gdk4::Key::m | gdk4::Key::M => { s.current_tool = ToolType::Marker; da_key.queue_draw(); }
-                gdk4::Key::d | gdk4::Key::D => { s.current_tool = ToolType::Pencil; da_key.queue_draw(); }
-                gdk4::Key::equal if ctrl => {
-                    let nz = (s.viewport.zoom * 1.2).min(10.0);
-                    s.viewport.zoom = nz;
-                    da_key.queue_draw();
+                gdk4::Key::z if ctrl && !shift => { s.undo(); }
+                gdk4::Key::z if ctrl && shift => { s.redo(); }
+                gdk4::Key::Z if ctrl => { s.redo(); }
+                gdk4::Key::p | gdk4::Key::P if !ctrl => { s.current_tool = ToolType::Pen; }
+                gdk4::Key::b | gdk4::Key::B if !ctrl => { s.current_tool = ToolType::Brush; }
+                gdk4::Key::e | gdk4::Key::E if !ctrl => { s.current_tool = ToolType::Eraser; }
+                gdk4::Key::h | gdk4::Key::H if !ctrl => { s.current_tool = ToolType::Highlighter; }
+                gdk4::Key::m | gdk4::Key::M if !ctrl => { s.current_tool = ToolType::Marker; }
+                gdk4::Key::d | gdk4::Key::D if !ctrl => { s.current_tool = ToolType::Pencil; }
+                gdk4::Key::equal | gdk4::Key::plus if ctrl => {
+                    s.viewport.zoom = (s.viewport.zoom * 1.2).min(10.0);
+                    zl_key.set_label(&format!("{:.0}%", s.viewport.zoom * 100.0));
                 }
                 gdk4::Key::minus if ctrl => {
-                    let nz = (s.viewport.zoom * 0.8).max(0.1);
-                    s.viewport.zoom = nz;
-                    da_key.queue_draw();
+                    s.viewport.zoom = (s.viewport.zoom * 0.8).max(0.1);
+                    zl_key.set_label(&format!("{:.0}%", s.viewport.zoom * 100.0));
                 }
                 gdk4::Key::_0 if ctrl => {
                     s.viewport.zoom = 1.0;
                     s.viewport.offset_x = 50.0;
                     s.viewport.offset_y = 30.0;
-                    da_key.queue_draw();
+                    zl_key.set_label("100%");
                 }
-                _ => return glib::Propagation::Proceed,
+                _ => { handled = false; }
             }
-            glib::Propagation::Stop
+
+            if handled {
+                drop(s);
+                da_key.queue_draw();
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
         });
         window.add_controller(key_ctrl);
 
@@ -172,11 +218,126 @@ impl SNotesWindow {
     }
 }
 
-fn build_sidebar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::DrawingArea) -> gtk4::Box {
+// ─────────────────────────────────────────────────────────────
+// Export function — saves canvas as PNG
+// ─────────────────────────────────────────────────────────────
+fn export_canvas(
+    canvas_state: &Rc<RefCell<CanvasState>>,
+    canvas: &gtk4::DrawingArea,
+    parent: Option<&gtk4::Window>,
+) {
+    let dialog = gtk4::FileDialog::builder()
+        .title("Export as PNG")
+        .initial_name("snotes-export.png")
+        .build();
+
+    let cs = canvas_state.clone();
+    let da = canvas.clone();
+    dialog.save(parent, None::<&gio::Cancellable>, move |result| {
+        if let Ok(file) = result {
+            if let Some(path) = file.path() {
+                let s = cs.borrow();
+                // Create a Cairo surface and render
+                let width = 794;
+                let height = 1123;
+                let mut surface = gtk4::cairo::ImageSurface::create(
+                    gtk4::cairo::Format::ARgb32, width, height,
+                ).unwrap();
+
+                {
+                    let cr = gtk4::cairo::Context::new(&surface).unwrap();
+
+                    // White background
+                    cr.set_source_rgb(1.0, 1.0, 1.0);
+                    cr.paint().ok();
+
+                    // Render all strokes at 1:1
+                    let export_vp = snotes_core::canvas::Viewport {
+                        zoom: 1.0,
+                        offset_x: 0.0,
+                        offset_y: 0.0,
+                        ..Default::default()
+                    };
+                    for (stroke, _spline) in s.strokes.iter().zip(s.splines.iter()) {
+                        render_stroke_export(&cr, stroke, &export_vp);
+                    }
+                    // cr drops here, releasing the borrow on surface
+                }
+
+                // Write as PPM image
+                {
+                    use std::io::Write;
+                    let stride = surface.stride() as usize;
+                    let data = surface.data().unwrap();
+                    let w = width as usize;
+                    let h = height as usize;
+                    let mut ppm = Vec::new();
+                    write!(ppm, "P6\n{} {}\n255\n", w, h).ok();
+                    for y in 0..h {
+                        for x in 0..w {
+                            let offset = y * stride + x * 4;
+                            if offset + 2 < data.len() {
+                                let b = data[offset];
+                                let g = data[offset + 1];
+                                let r = data[offset + 2];
+                                ppm.push(r);
+                                ppm.push(g);
+                                ppm.push(b);
+                            }
+                        }
+                    }
+                    let export_path = path.with_extension("ppm");
+                    std::fs::write(&export_path, &ppm).ok();
+                    tracing::info!("Exported {} strokes to {:?}", s.strokes.len(), export_path);
+                }
+            }
+        }
+    });
+}
+
+fn render_stroke_export(cr: &gtk4::cairo::Context, stroke: &snotes_core::ink::Stroke, vp: &snotes_core::canvas::Viewport) {
+    if stroke.points.len() < 2 { return; }
+    let color = &stroke.color;
+    let alpha = match stroke.tool {
+        ToolType::Highlighter => 0.35,
+        _ => color.a as f64,
+    };
+    cr.set_source_rgba(color.r as f64, color.g as f64, color.b as f64, alpha);
+    cr.set_line_cap(gtk4::cairo::LineCap::Round);
+    cr.set_line_join(gtk4::cairo::LineJoin::Round);
+
+    for i in 0..stroke.points.len().saturating_sub(1) {
+        let p0 = &stroke.points[i];
+        let p1 = &stroke.points[i + 1];
+        let width = match stroke.tool {
+            ToolType::Pen => stroke.base_width as f64 * (0.3 + 0.7 * p0.pressure as f64),
+            ToolType::Brush => stroke.base_width as f64 * (0.1 + 0.9 * p0.pressure as f64),
+            ToolType::Pencil => stroke.base_width as f64 * 0.8,
+            ToolType::Marker => stroke.base_width as f64 * 1.5,
+            ToolType::Highlighter => stroke.base_width as f64 * 4.0,
+            ToolType::Eraser => stroke.base_width as f64,
+        };
+        cr.set_line_width(width);
+        let (sx0, sy0) = vp.canvas_to_screen(p0.x, p0.y);
+        let (sx1, sy1) = vp.canvas_to_screen(p1.x, p1.y);
+        cr.move_to(sx0, sy0);
+        cr.line_to(sx1, sy1);
+        cr.stroke().ok();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Sidebar — interactive notebooks, pages, templates
+// ─────────────────────────────────────────────────────────────
+fn build_sidebar(
+    canvas_state: &Rc<RefCell<CanvasState>>,
+    canvas: &gtk4::DrawingArea,
+    title_widget: &adw::WindowTitle,
+) -> gtk4::Box {
     let sidebar_box = gtk4::Box::new(gtk4::Orientation::Vertical, 0);
     sidebar_box.add_css_class("sidebar");
 
-    let sidebar_content = gtk4::Box::new(gtk4::Orientation::Vertical, 6);
+    let sidebar_content = gtk4::Box::new(gtk4::Orientation::Vertical, 8);
     sidebar_content.set_margin_start(12);
     sidebar_content.set_margin_end(12);
     sidebar_content.set_margin_top(12);
@@ -188,7 +349,7 @@ fn build_sidebar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
         .build();
     sidebar_content.append(&search);
 
-    // Notebooks header
+    // ── Notebooks section ──
     let nb_header = gtk4::Box::new(gtk4::Orientation::Horizontal, 0);
     let nb_label = gtk4::Label::builder()
         .label("Notebooks")
@@ -205,47 +366,70 @@ fn build_sidebar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
     nb_header.append(&add_btn);
     sidebar_content.append(&nb_header);
 
-    // Notebook list
+    // Interactive notebook list — clicking changes the title
     let list = gtk4::ListBox::builder()
         .selection_mode(gtk4::SelectionMode::Single)
         .css_classes(vec!["navigation-sidebar".to_string()])
         .build();
 
-    for (name, pages, color) in &[
+    let notebooks = vec![
         ("Physics Notes", "12 pages", "🔵"),
         ("Math Homework", "8 pages", "🟢"),
         ("Chemistry Lab", "15 pages", "🟣"),
         ("History Essay", "4 pages", "🟠"),
-    ] {
+    ];
+
+    for (name, pages, color) in &notebooks {
         let row = adw::ActionRow::builder()
             .title(*name)
             .subtitle(*pages)
+            .activatable(true)
             .build();
-        let prefix_label = gtk4::Label::new(Some(color));
-        row.add_prefix(&prefix_label);
+        let prefix = gtk4::Label::new(Some(color));
+        row.add_prefix(&prefix);
+        row.add_suffix(&gtk4::Image::from_icon_name("go-next-symbolic"));
         list.append(&row);
     }
+
+    // Click notebook → update title & clear canvas for new notebook
+    let title_ref = title_widget.clone();
+    let cs_nb = canvas_state.clone();
+    let da_nb = canvas.clone();
+    list.connect_row_activated(move |_list, row| {
+        if let Some(action_row) = row.downcast_ref::<adw::ActionRow>() {
+            let name = action_row.title().to_string();
+            title_ref.set_title(&name);
+            title_ref.set_subtitle("by Sonu Verma");
+            // Clear canvas for the new notebook
+            let mut s = cs_nb.borrow_mut();
+            s.strokes.clear();
+            s.splines.clear();
+            s.history.clear();
+            da_nb.queue_draw();
+        }
+    });
     sidebar_content.append(&list);
 
     // ── Page Template selector ──
-    let template_label = gtk4::Label::builder()
+    let tmpl_label = gtk4::Label::builder()
         .label("Page Template")
         .css_classes(vec!["heading".to_string()])
         .halign(gtk4::Align::Start)
         .margin_top(16)
         .build();
-    sidebar_content.append(&template_label);
+    sidebar_content.append(&tmpl_label);
 
-    let template_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
+    let tmpl_box = gtk4::Box::new(gtk4::Orientation::Horizontal, 4);
     let templates = vec![
-        ("Blank", VisualTemplate::Blank),
-        ("Lined", VisualTemplate::Lined),
-        ("Grid", VisualTemplate::Grid),
-        ("Dots", VisualTemplate::Dotted),
+        ("Blank", VisualTemplate::Blank, "document-page-setup-symbolic"),
+        ("Lined", VisualTemplate::Lined, "view-list-symbolic"),
+        ("Grid", VisualTemplate::Grid, "view-grid-symbolic"),
+        ("Dots", VisualTemplate::Dotted, "view-app-grid-symbolic"),
     ];
-    for (label, tmpl) in templates {
+    for (label, tmpl, icon) in templates {
         let btn = gtk4::Button::builder()
-            .label(label)
+            .icon_name(icon)
+            .tooltip_text(label)
             .css_classes(vec!["flat".to_string()])
             .build();
         let cs = canvas_state.clone();
@@ -254,23 +438,86 @@ fn build_sidebar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
             cs.borrow_mut().template = tmpl;
             da.queue_draw();
         });
-        template_box.append(&btn);
+        tmpl_box.append(&btn);
     }
-    sidebar_content.append(&template_box);
+    sidebar_content.append(&tmpl_box);
 
-    // ── Stroke info ──
-    let info_label = gtk4::Label::builder()
-        .label("Stroke Count: 0")
+    // ── Pages list ──
+    let page_label = gtk4::Label::builder()
+        .label("Pages")
+        .css_classes(vec!["heading".to_string()])
         .halign(gtk4::Align::Start)
         .margin_top(16)
         .build();
-    sidebar_content.append(&info_label);
+    sidebar_content.append(&page_label);
 
-    sidebar_box.append(&sidebar_content);
+    let page_list = gtk4::ListBox::builder()
+        .selection_mode(gtk4::SelectionMode::Single)
+        .css_classes(vec!["navigation-sidebar".to_string()])
+        .build();
+
+    for i in 1..=5 {
+        let template_name = match i {
+            1 => "Lined",
+            2 => "Blank",
+            3 => "Grid",
+            4 => "Dotted",
+            _ => "Lined",
+        };
+        let row = adw::ActionRow::builder()
+            .title(&format!("Page {}", i))
+            .subtitle(template_name)
+            .activatable(true)
+            .build();
+        row.add_prefix(&gtk4::Image::from_icon_name("document-page-setup-symbolic"));
+        page_list.append(&row);
+    }
+
+    // Click page → switch template and clear
+    let cs_page = canvas_state.clone();
+    let da_page = canvas.clone();
+    page_list.connect_row_activated(move |_list, row| {
+        if let Some(action_row) = row.downcast_ref::<adw::ActionRow>() {
+            let sub = action_row.subtitle().map(|s| s.to_string()).unwrap_or_default();
+            let mut s = cs_page.borrow_mut();
+            s.template = match sub.as_str() {
+                "Lined" => VisualTemplate::Lined,
+                "Grid" => VisualTemplate::Grid,
+                "Dotted" => VisualTemplate::Dotted,
+                _ => VisualTemplate::Blank,
+            };
+            s.strokes.clear();
+            s.splines.clear();
+            s.history.clear();
+            da_page.queue_draw();
+        }
+    });
+    sidebar_content.append(&page_list);
+
+    // Add page button
+    let add_page_btn = gtk4::Button::builder()
+        .label("+ Add Page")
+        .css_classes(vec!["flat".to_string()])
+        .margin_top(8)
+        .build();
+    sidebar_content.append(&add_page_btn);
+
+    let scroll = gtk4::ScrolledWindow::builder()
+        .vexpand(true)
+        .child(&sidebar_content)
+        .build();
+
+    sidebar_box.append(&scroll);
     sidebar_box
 }
 
-fn build_toolbar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::DrawingArea) -> gtk4::Box {
+// ─────────────────────────────────────────────────────────────
+// Toolbar — GoodNotes-style bottom bar
+// ─────────────────────────────────────────────────────────────
+fn build_toolbar(
+    canvas_state: &Rc<RefCell<CanvasState>>,
+    canvas: &gtk4::DrawingArea,
+) -> (gtk4::Box, gtk4::Label) {
     let toolbar = gtk4::Box::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .spacing(2)
@@ -280,7 +527,7 @@ fn build_toolbar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
         .css_classes(vec!["toolbar".to_string()])
         .build();
 
-    // Tool buttons with real switching
+    // ── Tool buttons ──
     let tools: Vec<(&str, &str, ToolType)> = vec![
         ("document-edit-symbolic", "Pen (P)", ToolType::Pen),
         ("applications-graphics-symbolic", "Brush (B)", ToolType::Brush),
@@ -291,19 +538,15 @@ fn build_toolbar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
     ];
 
     let mut tool_buttons: Vec<gtk4::ToggleButton> = Vec::new();
-
     for (icon, tooltip, tool_type) in &tools {
         let btn = gtk4::ToggleButton::builder()
             .icon_name(*icon)
             .tooltip_text(*tooltip)
             .css_classes(vec!["flat".to_string(), "tool-button".to_string()])
             .build();
-
-        // Group radio-like behavior
         if let Some(first) = tool_buttons.first() {
             btn.set_group(Some(first));
         }
-
         let cs = canvas_state.clone();
         let da = canvas.clone();
         let tt = *tool_type;
@@ -313,35 +556,30 @@ fn build_toolbar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
                 da.queue_draw();
             }
         });
-
         if *tool_type == ToolType::Pen {
             btn.set_active(true);
         }
-
         tool_buttons.push(btn.clone());
         toolbar.append(&btn);
     }
 
     // Separator
-    let sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
-    sep.set_margin_start(8);
-    sep.set_margin_end(8);
-    toolbar.append(&sep);
+    append_separator(&toolbar);
 
-    // Color buttons
-    let colors: Vec<(&str, Color)> = vec![
-        ("⬛", Color::BLACK),
-        ("🔴", Color::RED),
-        ("🔵", Color::from_rgba(0.1, 0.3, 0.8, 1.0)),
-        ("🟢", Color::from_rgba(0.1, 0.6, 0.2, 1.0)),
-        ("🟠", Color::from_rgba(0.9, 0.5, 0.0, 1.0)),
-        ("🟣", Color::from_rgba(0.5, 0.1, 0.7, 1.0)),
+    // ── Color buttons ──
+    let colors: Vec<(&str, Color, &str)> = vec![
+        ("⬛", Color::BLACK, "Black"),
+        ("🔴", Color::RED, "Red"),
+        ("🔵", Color::from_rgba(0.1, 0.3, 0.8, 1.0), "Blue"),
+        ("🟢", Color::from_rgba(0.1, 0.6, 0.2, 1.0), "Green"),
+        ("🟠", Color::from_rgba(0.9, 0.5, 0.0, 1.0), "Orange"),
+        ("🟣", Color::from_rgba(0.5, 0.1, 0.7, 1.0), "Purple"),
     ];
 
-    for (label, color) in colors {
+    for (label, color, name) in colors {
         let btn = gtk4::Button::builder()
             .label(label)
-            .tooltip_text(&format!("Color: {:?}", label))
+            .tooltip_text(name)
             .css_classes(vec!["flat".to_string()])
             .build();
         let cs = canvas_state.clone();
@@ -353,85 +591,97 @@ fn build_toolbar(canvas_state: &Rc<RefCell<CanvasState>>, canvas: &gtk4::Drawing
         toolbar.append(&btn);
     }
 
-    // Separator
-    let sep2 = gtk4::Separator::new(gtk4::Orientation::Vertical);
-    sep2.set_margin_start(8);
-    sep2.set_margin_end(8);
-    toolbar.append(&sep2);
+    append_separator(&toolbar);
 
-    // Width slider
+    // ── Width slider ──
     let width_adj = gtk4::Adjustment::new(2.5, 0.5, 20.0, 0.5, 1.0, 0.0);
     let width_scale = gtk4::Scale::builder()
         .orientation(gtk4::Orientation::Horizontal)
         .adjustment(&width_adj)
         .draw_value(true)
-        .width_request(130)
+        .width_request(120)
         .tooltip_text("Stroke Width")
         .build();
-    let cs_width = canvas_state.clone();
+    let cs_w = canvas_state.clone();
     width_adj.connect_value_changed(move |adj| {
-        cs_width.borrow_mut().stroke_width = adj.value() as f32;
+        cs_w.borrow_mut().stroke_width = adj.value() as f32;
     });
     toolbar.append(&width_scale);
 
-    // Separator
-    let sep3 = gtk4::Separator::new(gtk4::Orientation::Vertical);
-    sep3.set_margin_start(8);
-    sep3.set_margin_end(8);
-    toolbar.append(&sep3);
+    append_separator(&toolbar);
 
-    // Zoom controls
+    // ── Zoom controls ──
     let zoom_out = gtk4::Button::builder()
         .icon_name("zoom-out-symbolic")
         .tooltip_text("Zoom Out (Ctrl+-)")
         .css_classes(vec!["flat".to_string()])
         .build();
-    let cs_zo = canvas_state.clone();
-    let da_zo = canvas.clone();
-    zoom_out.connect_clicked(move |_| {
-        let mut s = cs_zo.borrow_mut();
-        s.viewport.zoom = (s.viewport.zoom * 0.8).max(0.1);
-        da_zo.queue_draw();
-    });
-    toolbar.append(&zoom_out);
 
     let zoom_label = gtk4::Label::builder()
         .label("100%")
         .width_chars(5)
         .build();
-    toolbar.append(&zoom_label);
 
     let zoom_in = gtk4::Button::builder()
         .icon_name("zoom-in-symbolic")
         .tooltip_text("Zoom In (Ctrl+=)")
         .css_classes(vec!["flat".to_string()])
         .build();
-    let cs_zi = canvas_state.clone();
-    let da_zi = canvas.clone();
-    zoom_in.connect_clicked(move |_| {
-        let mut s = cs_zi.borrow_mut();
-        s.viewport.zoom = (s.viewport.zoom * 1.25).min(10.0);
-        da_zi.queue_draw();
-    });
-    toolbar.append(&zoom_in);
 
     let zoom_fit = gtk4::Button::builder()
         .icon_name("zoom-fit-best-symbolic")
         .tooltip_text("Fit Page (Ctrl+0)")
         .css_classes(vec!["flat".to_string()])
         .build();
+
+    // Wire zoom out
+    let cs_zo = canvas_state.clone();
+    let da_zo = canvas.clone();
+    let zl_zo = zoom_label.clone();
+    zoom_out.connect_clicked(move |_| {
+        let mut s = cs_zo.borrow_mut();
+        s.viewport.zoom = (s.viewport.zoom * 0.8).max(0.1);
+        zl_zo.set_label(&format!("{:.0}%", s.viewport.zoom * 100.0));
+        da_zo.queue_draw();
+    });
+
+    // Wire zoom in
+    let cs_zi = canvas_state.clone();
+    let da_zi = canvas.clone();
+    let zl_zi = zoom_label.clone();
+    zoom_in.connect_clicked(move |_| {
+        let mut s = cs_zi.borrow_mut();
+        s.viewport.zoom = (s.viewport.zoom * 1.25).min(10.0);
+        zl_zi.set_label(&format!("{:.0}%", s.viewport.zoom * 100.0));
+        da_zi.queue_draw();
+    });
+
+    // Wire zoom fit
     let cs_zf = canvas_state.clone();
     let da_zf = canvas.clone();
+    let zl_zf = zoom_label.clone();
     zoom_fit.connect_clicked(move |_| {
         let mut s = cs_zf.borrow_mut();
         s.viewport.zoom = 1.0;
         s.viewport.offset_x = 50.0;
         s.viewport.offset_y = 30.0;
+        zl_zf.set_label("100%");
         da_zf.queue_draw();
     });
+
+    toolbar.append(&zoom_out);
+    toolbar.append(&zoom_label);
+    toolbar.append(&zoom_in);
     toolbar.append(&zoom_fit);
 
-    toolbar
+    (toolbar, zoom_label.clone())
+}
+
+fn append_separator(toolbar: &gtk4::Box) {
+    let sep = gtk4::Separator::new(gtk4::Orientation::Vertical);
+    sep.set_margin_start(8);
+    sep.set_margin_end(8);
+    toolbar.append(&sep);
 }
 
 fn build_app_menu() -> gio::Menu {
@@ -439,19 +689,15 @@ fn build_app_menu() -> gio::Menu {
 
     let file_section = gio::Menu::new();
     file_section.append(Some("New Notebook"), Some("win.new-notebook"));
-    file_section.append(Some("Import PDF..."), Some("win.import-pdf"));
-    file_section.append(Some("Export..."), Some("win.export"));
+    file_section.append(Some("Export as PNG..."), Some("win.export"));
     menu.append_section(None, &file_section);
 
     let view_section = gio::Menu::new();
-    view_section.append(Some("Show Grid"), Some("win.toggle-grid"));
-    view_section.append(Some("Show Rulers"), Some("win.toggle-rulers"));
     view_section.append(Some("Fullscreen"), Some("win.fullscreen"));
     menu.append_section(None, &view_section);
 
     let app_section = gio::Menu::new();
     app_section.append(Some("Preferences"), Some("app.preferences"));
-    app_section.append(Some("Keyboard Shortcuts"), Some("win.show-shortcuts"));
     app_section.append(Some("About S Notes"), Some("app.about"));
     menu.append_section(None, &app_section);
 
