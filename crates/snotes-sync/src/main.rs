@@ -4,6 +4,8 @@ mod webdav;
 mod watcher;
 mod dbus_ipc;
 mod nextcloud;
+mod ocr;
+mod conflict;
 
 use tracing_subscriber::EnvFilter;
 

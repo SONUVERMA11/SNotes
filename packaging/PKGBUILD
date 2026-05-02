@@ -1,0 +1,36 @@
+# Maintainer: S Notes Contributors <snotes@example.com>
+pkgname=snotes
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Linux-native handwriting & annotation app"
+arch=('x86_64')
+url="https://github.com/SONUVERMA11/SNotes"
+license=('GPL-3.0-or-later')
+depends=('gtk4' 'libadwaita' 'libinput' 'sqlite')
+makedepends=('rust' 'cargo' 'pkgconf' 'clang')
+optdepends=('tesseract: OCR handwriting recognition'
+            'tesseract-data-eng: English OCR language pack')
+source=("${pkgname}-${pkgver}.tar.gz::https://github.com/SONUVERMA11/SNotes/archive/v${pkgver}.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+    cd "SNotes-${pkgver}"
+    export CARGO_HOME="${srcdir}/cargo-home"
+    cargo build --release -p snotes-gtk -p snotes-cli -p snotes-sync
+}
+
+check() {
+    cd "SNotes-${pkgver}"
+    export CARGO_HOME="${srcdir}/cargo-home"
+    cargo test --workspace --exclude snotes-gtk
+}
+
+package() {
+    cd "SNotes-${pkgver}"
+    install -Dm755 target/release/snotes-gtk "${pkgdir}/usr/bin/snotes-gtk"
+    install -Dm755 target/release/snotes-cli "${pkgdir}/usr/bin/snotes-cli"
+    install -Dm755 target/release/snotes-sync "${pkgdir}/usr/bin/snotes-sync"
+    install -Dm644 data/org.snotes.App.desktop "${pkgdir}/usr/share/applications/org.snotes.App.desktop"
+    install -Dm644 data/org.snotes.App.metainfo.xml "${pkgdir}/usr/share/metainfo/org.snotes.App.metainfo.xml"
+    install -Dm644 README.md "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}
