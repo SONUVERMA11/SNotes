@@ -12,6 +12,8 @@ mod stroke_builder;
 mod renderer;
 mod geometry;
 mod eraser;
+pub mod text;
+pub mod color_picker;
 
 pub use stroke::*;
 pub use bezier::*;

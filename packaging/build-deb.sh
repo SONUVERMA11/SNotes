@@ -49,7 +49,7 @@ Installed-Size: ${INSTALLED_SIZE}
 Depends: libgtk-4-1 (>= 4.12), libadwaita-1-0 (>= 1.4), libinput10, libsqlite3-0
 Recommends: tesseract-ocr
 Suggests: tesseract-ocr-eng
-Maintainer: S Notes Contributors <snotes@example.com>
+Maintainer: Sonu Verma <https://github.com/SONUVERMA11>
 Homepage: https://github.com/SONUVERMA11/SNotes
 Description: Linux-native handwriting & annotation app
  S Notes is a powerful handwriting and annotation application for Linux,

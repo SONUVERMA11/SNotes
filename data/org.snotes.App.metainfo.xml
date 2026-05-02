@@ -37,11 +37,11 @@
     <control>tablet</control>
   </supports>
 
-  <url type="homepage">https://github.com/snotes/snotes</url>
-  <url type="bugtracker">https://github.com/snotes/snotes/issues</url>
+  <url type="homepage">https://github.com/SONUVERMA11/SNotes</url>
+  <url type="bugtracker">https://github.com/SONUVERMA11/SNotes/issues</url>
 
-  <developer id="org.snotes">
-    <name>S Notes Contributors</name>
+  <developer id="com.github.SONUVERMA11">
+    <name>Sonu Verma</name>
   </developer>
 
   <content_rating type="oars-1.1" />

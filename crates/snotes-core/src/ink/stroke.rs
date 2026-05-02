@@ -45,7 +45,7 @@ impl StrokePoint {
 }
 
 /// RGBA color
-#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Color {
     pub r: f32,
     pub g: f32,

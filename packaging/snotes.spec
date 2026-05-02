@@ -54,5 +54,5 @@ install -Dm644 data/org.snotes.App.metainfo.xml %{buildroot}%{_datadir}/metainfo
 %{_datadir}/metainfo/org.snotes.App.metainfo.xml
 
 %changelog
-* Sat May 03 2026 S Notes Contributors <snotes@example.com> - 0.1.0-1
+* Sat May 03 2026 Sonu Verma <https://github.com/SONUVERMA11> - 0.1.0-1
 - Initial release

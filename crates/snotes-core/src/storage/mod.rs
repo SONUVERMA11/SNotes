@@ -1,6 +1,8 @@
 //! Storage: SQLite metadata + LZ4-compressed FlatBuffers for strokes
 
 mod database;
+pub mod autosave;
+pub mod search;
 
 pub use database::*;
 
