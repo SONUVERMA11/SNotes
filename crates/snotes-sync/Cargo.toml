@@ -1,0 +1,36 @@
+[package]
+name = "snotes-sync"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Async sync daemon for S Notes (WebDAV/Nextcloud)"
+
+[[bin]]
+name = "snotes-sync"
+path = "src/main.rs"
+
+[dependencies]
+snotes-core = { workspace = true }
+
+# Async
+tokio = { workspace = true }
+reqwest = { workspace = true }
+
+# D-Bus IPC
+zbus = { workspace = true }
+
+# File watching
+notify = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+thiserror = { workspace = true }
+log = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }

@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>org.snotes.App</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>S Notes</name>
+  <summary>Linux-native handwriting and annotation app</summary>
+
+  <description>
+    <p>
+      S Notes is a powerful handwriting and annotation application for Linux,
+      designed for students, professionals, and creatives who use stylus tablets.
+    </p>
+    <p>Features include:</p>
+    <ul>
+      <li>Smooth Bézier-based ink rendering with pressure sensitivity</li>
+      <li>PDF import and annotation</li>
+      <li>Multiple tool types: pen, brush, pencil, marker, highlighter</li>
+      <li>Shape recognition and infinite canvas</li>
+      <li>Multi-layer support with page templates</li>
+      <li>Cloud sync via WebDAV/Nextcloud</li>
+      <li>WASM plugin system for extensibility</li>
+    </ul>
+  </description>
+
+  <launchable type="desktop-id">org.snotes.App.desktop</launchable>
+
+  <categories>
+    <category>Office</category>
+    <category>Education</category>
+    <category>Graphics</category>
+  </categories>
+
+  <supports>
+    <control>pointing</control>
+    <control>keyboard</control>
+    <control>tablet</control>
+  </supports>
+
+  <url type="homepage">https://github.com/snotes/snotes</url>
+  <url type="bugtracker">https://github.com/snotes/snotes/issues</url>
+
+  <developer id="org.snotes">
+    <name>S Notes Contributors</name>
+  </developer>
+
+  <content_rating type="oars-1.1" />
+
+  <releases>
+    <release version="0.1.0" date="2026-05-02">
+      <description>
+        <p>Initial release with core engine, GTK4 UI, and sync daemon.</p>
+      </description>
+    </release>
+  </releases>
+</component>

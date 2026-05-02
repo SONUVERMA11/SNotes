@@ -1,0 +1,54 @@
+[package]
+name = "snotes-core"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "Core engine for S Notes: input handling, ink rendering, document model"
+
+[features]
+default = ["storage"]
+gpu = ["dep:skia-safe"]
+cairo-backend = ["dep:cairo-rs"]
+libinput = ["dep:input"]
+storage = ["dep:rusqlite"]
+full = ["gpu", "cairo-backend", "libinput", "storage"]
+
+[dependencies]
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+# Error handling
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+
+# Logging
+log = { workspace = true }
+tracing = { workspace = true }
+
+# Math & Geometry
+nalgebra = { workspace = true }
+euclid = { workspace = true }
+
+# Input (Linux) — optional, requires libinput-dev
+input = { workspace = true, optional = true }
+
+# Rendering — optional, requires system libs
+skia-safe = { workspace = true, optional = true }
+cairo-rs = { workspace = true, optional = true }
+
+# Storage
+rusqlite = { workspace = true, optional = true }
+flatbuffers = { workspace = true }
+lz4_flex = { workspace = true }
+
+# PDF / Image
+lopdf = { workspace = true }
+printpdf = { workspace = true }
+image = { workspace = true }
+resvg = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.0"

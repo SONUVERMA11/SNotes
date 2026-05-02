@@ -1,0 +1,20 @@
+[package]
+name = "snotes-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "CLI tool for S Notes export and batch operations"
+
+[[bin]]
+name = "snotes-cli"
+path = "src/main.rs"
+
+[dependencies]
+snotes-core = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }

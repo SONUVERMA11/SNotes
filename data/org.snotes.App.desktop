@@ -1,0 +1,13 @@
+[Desktop Entry]
+Name=S Notes
+GenericName=Handwriting App
+Comment=Linux-native handwriting and annotation application
+Exec=snotes-gtk %f
+Icon=org.snotes.App
+Terminal=false
+Type=Application
+Categories=Office;Education;Graphics;
+Keywords=notes;handwriting;annotation;pdf;stylus;tablet;pen;
+StartupWMClass=snotes-gtk
+MimeType=application/x-snotes;application/pdf;image/png;image/svg+xml;
+StartupNotify=true

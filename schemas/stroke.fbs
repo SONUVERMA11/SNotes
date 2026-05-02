@@ -1,0 +1,56 @@
+// FlatBuffers schema for stroke data serialization
+// Compile with: flatc --rust -o src/storage/ schemas/stroke.fbs
+
+namespace snotes.schema;
+
+/// RGBA color
+struct ColorFB {
+    r: float;
+    g: float;
+    b: float;
+    a: float;
+}
+
+/// A single point in a stroke
+struct StrokePointFB {
+    x: double;
+    y: double;
+    pressure: float;
+    tilt_x: float;
+    tilt_y: float;
+    timestamp_us: ulong;
+}
+
+/// Tool type enum
+enum ToolTypeFB: byte {
+    Pen = 0,
+    Brush = 1,
+    Pencil = 2,
+    Marker = 3,
+    Highlighter = 4,
+    Eraser = 5,
+}
+
+/// A complete stroke
+table StrokeFB {
+    id: string (required);
+    tool: ToolTypeFB = Pen;
+    color: ColorFB (required);
+    base_width: float;
+    points: [StrokePointFB] (required);
+    layer_id: string (required);
+    timestamp: long;
+    bounds_min_x: double;
+    bounds_min_y: double;
+    bounds_max_x: double;
+    bounds_max_y: double;
+}
+
+/// Collection of strokes for a page
+table PageStrokesFB {
+    page_id: string (required);
+    strokes: [StrokeFB] (required);
+    version: uint = 1;
+}
+
+root_type PageStrokesFB;

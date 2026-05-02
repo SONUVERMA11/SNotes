@@ -1,0 +1,36 @@
+[package]
+name = "snotes-gtk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "GTK4/libadwaita frontend for S Notes"
+
+[[bin]]
+name = "snotes"
+path = "src/main.rs"
+
+[dependencies]
+snotes-core = { workspace = true }
+
+# GTK
+gtk4 = { workspace = true }
+libadwaita = { workspace = true }
+glib = { workspace = true }
+gio = { workspace = true }
+gdk4 = { workspace = true }
+
+# Async
+async-channel = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+
+# Error handling
+anyhow = { workspace = true }
+log = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
