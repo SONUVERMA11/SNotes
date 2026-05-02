@@ -116,7 +116,7 @@ impl Theme {
         }
     }
 
-    /// Generate CSS for the GTK4 application based on this theme
+    /// Generate professional CSS for the GTK4 application
     pub fn to_css(&self) -> String {
         format!(
             r#"
@@ -127,44 +127,104 @@ impl Theme {
             @define-color text_color {text};
             @define-color border_color {border};
 
-            window {{
-                background-color: @bg_color;
-                color: @text_color;
-            }}
-
-            .toolbar {{
-                background-color: {toolbar};
-                border-bottom: 1px solid @border_color;
-                padding: 4px 8px;
-            }}
-
-            .sidebar {{
-                background-color: {sidebar};
-                border-right: 1px solid @border_color;
-            }}
-
-            .canvas-area {{
-                background-color: {canvas};
-            }}
+            window {{ background-color: @bg_color; color: @text_color; }}
 
             headerbar {{
                 background-color: {surface};
+                border-bottom: 1px solid alpha(@border_color, 0.5);
+                min-height: 42px;
+            }}
+            headerbar button {{
+                border-radius: 8px;
+                min-width: 32px; min-height: 32px;
+                margin: 2px;
+                transition: all 150ms ease;
+            }}
+            headerbar button:hover {{ background-color: alpha(@primary_color, 0.12); }}
+
+            .sidebar {{
+                background-color: {sidebar};
+                border-right: 1px solid alpha(@border_color, 0.3);
+            }}
+            .sidebar .heading {{
+                font-weight: 700; font-size: 13px;
+                letter-spacing: 0.3px; opacity: 0.7;
+                text-transform: uppercase;
+            }}
+            .sidebar searchentry {{
+                border-radius: 10px; padding: 6px 12px;
+                margin-bottom: 8px;
+                background-color: alpha(@surface_color, 0.6);
+                border: 1px solid alpha(@border_color, 0.3);
+            }}
+            .sidebar searchentry:focus {{
+                border-color: @primary_color;
+            }}
+            .navigation-sidebar row {{
+                border-radius: 10px; margin: 2px 4px;
+                transition: all 150ms ease;
+            }}
+            .navigation-sidebar row:hover {{
+                background-color: alpha(@primary_color, 0.08);
+            }}
+            .navigation-sidebar row:selected {{
+                background-color: alpha(@primary_color, 0.18);
             }}
 
+            .toolbar {{
+                background-color: alpha({toolbar}, 0.95);
+                border-top: 1px solid alpha(@border_color, 0.4);
+                padding: 5px 12px;
+                min-height: 44px;
+            }}
+            .tool-button {{
+                border-radius: 10px;
+                min-width: 36px; min-height: 36px;
+                padding: 4px; margin: 0 1px;
+                transition: all 200ms ease;
+                border: 2px solid transparent;
+            }}
+            .tool-button:hover {{
+                background-color: alpha(@primary_color, 0.1);
+            }}
             .tool-button:checked {{
+                background-color: alpha(@primary_color, 0.2);
+                color: @primary_color;
+                border-color: @primary_color;
+                font-weight: 700;
+            }}
+
+            .canvas-area {{ background-color: {canvas}; }}
+
+            .toolbar button.flat {{
+                border-radius: 8px;
+                min-width: 32px; min-height: 32px;
+                transition: all 150ms ease;
+            }}
+            .toolbar button.flat:hover {{
+                background-color: alpha(@primary_color, 0.12);
+            }}
+            scale trough {{
+                border-radius: 6px; min-height: 6px;
+                background-color: alpha(@border_color, 0.3);
+            }}
+            scale highlight {{
+                border-radius: 6px;
                 background-color: @primary_color;
-                color: white;
-                border-radius: {radius}px;
             }}
-
-            .notebook-row {{
-                padding: 8px 12px;
-                border-radius: {radius}px;
-                margin: 2px 4px;
+            scale slider {{
+                background-color: @primary_color;
+                border-radius: 50%;
+                min-width: 16px; min-height: 16px;
+                border: 2px solid alpha(white, 0.3);
             }}
-
-            .notebook-row:selected {{
-                background-color: alpha(@primary_color, 0.15);
+            .toolbar separator {{
+                background-color: alpha(@border_color, 0.3);
+                min-width: 1px; margin: 6px 0;
+            }}
+            .toolbar label {{
+                font-size: 12px; font-weight: 600;
+                opacity: 0.8;
             }}
             "#,
             bg = self.colors.background,
@@ -176,7 +236,6 @@ impl Theme {
             toolbar = self.colors.toolbar_background,
             sidebar = self.colors.sidebar_background,
             canvas = self.colors.canvas_background,
-            radius = self.corner_radius,
         )
     }
 }
