@@ -171,42 +171,91 @@ impl CanvasState {
     }
 }
 
-/// Render a completed stroke using Cairo with pressure-variable width
-fn render_stroke_cairo(cr: &gtk4::cairo::Context, stroke: &Stroke, spline: &BezierSpline, viewport: &Viewport) {
+/// Render a completed stroke with smooth Bézier curves and pressure-variable width
+fn render_stroke_cairo(cr: &gtk4::cairo::Context, stroke: &Stroke, _spline: &BezierSpline, viewport: &Viewport) {
     if stroke.points.len() < 2 { return; }
 
     let color = &stroke.color;
     let alpha = match stroke.tool {
         ToolType::Highlighter => 0.35,
+        ToolType::Pencil => (color.a as f64 * 0.85),
         _ => color.a as f64,
     };
     cr.set_source_rgba(color.r as f64, color.g as f64, color.b as f64, alpha);
     cr.set_line_cap(gtk4::cairo::LineCap::Round);
     cr.set_line_join(gtk4::cairo::LineJoin::Round);
 
-    // Draw stroke segments with variable width based on pressure
-    for i in 0..stroke.points.len().saturating_sub(1) {
-        let p0 = &stroke.points[i];
-        let p1 = &stroke.points[i + 1];
+    let n = stroke.points.len();
 
-        let width = match stroke.tool {
-            ToolType::Pen => stroke.base_width as f64 * (0.3 + 0.7 * p0.pressure as f64),
-            ToolType::Brush => stroke.base_width as f64 * (0.1 + 0.9 * p0.pressure as f64),
-            ToolType::Pencil => stroke.base_width as f64 * (0.5 + 0.5 * p0.pressure as f64) * 0.8,
-            ToolType::Marker => stroke.base_width as f64 * 1.5,
-            ToolType::Highlighter => stroke.base_width as f64 * 4.0,
-            ToolType::Eraser => stroke.base_width as f64 * 2.0,
-        };
+    // For short strokes, draw simple line
+    if n < 4 {
+        let w = calc_width(stroke, &stroke.points[0], 0, n) * viewport.zoom;
+        cr.set_line_width(w);
+        let (sx, sy) = viewport.canvas_to_screen(stroke.points[0].x, stroke.points[0].y);
+        cr.move_to(sx, sy);
+        for p in &stroke.points[1..] {
+            let (sx, sy) = viewport.canvas_to_screen(p.x, p.y);
+            cr.line_to(sx, sy);
+        }
+        cr.stroke().ok();
+        return;
+    }
 
-        cr.set_line_width(width * viewport.zoom);
+    // Catmull-Rom → Cubic Bézier for smooth curves with variable width
+    // Process in segments so we can vary line width per segment
+    for i in 0..n - 1 {
+        let p0 = if i > 0 { &stroke.points[i - 1] } else { &stroke.points[i] };
+        let p1 = &stroke.points[i];
+        let p2 = &stroke.points[i + 1];
+        let p3 = if i + 2 < n { &stroke.points[i + 2] } else { &stroke.points[i + 1] };
 
-        let (sx0, sy0) = viewport.canvas_to_screen(p0.x, p0.y);
-        let (sx1, sy1) = viewport.canvas_to_screen(p1.x, p1.y);
+        // Catmull-Rom to Bézier control points
+        let (s1x, s1y) = viewport.canvas_to_screen(p1.x, p1.y);
+        let (s2x, s2y) = viewport.canvas_to_screen(p2.x, p2.y);
+        let (s0x, s0y) = viewport.canvas_to_screen(p0.x, p0.y);
+        let (s3x, s3y) = viewport.canvas_to_screen(p3.x, p3.y);
 
-        cr.move_to(sx0, sy0);
-        cr.line_to(sx1, sy1);
+        let cp1x = s1x + (s2x - s0x) / 6.0;
+        let cp1y = s1y + (s2y - s0y) / 6.0;
+        let cp2x = s2x - (s3x - s1x) / 6.0;
+        let cp2y = s2y - (s3y - s1y) / 6.0;
+
+        // Variable width with tapering at start and end
+        let width = calc_width(stroke, p1, i, n) * viewport.zoom;
+        cr.set_line_width(width);
+
+        cr.move_to(s1x, s1y);
+        cr.curve_to(cp1x, cp1y, cp2x, cp2y, s2x, s2y);
         cr.stroke().ok();
     }
+}
+
+/// Calculate stroke width with pressure, tool type, and start/end tapering
+fn calc_width(stroke: &Stroke, point: &StrokePoint, index: usize, total: usize) -> f64 {
+    let base = stroke.base_width as f64;
+    let pressure = point.pressure as f64;
+
+    // Tool-specific width
+    let tool_width = match stroke.tool {
+        ToolType::Pen => base * (0.3 + 0.7 * pressure),
+        ToolType::Brush => base * (0.1 + 0.9 * pressure) * 1.3,
+        ToolType::Pencil => base * (0.5 + 0.5 * pressure) * 0.7,
+        ToolType::Marker => base * 1.5,
+        ToolType::Highlighter => base * 5.0,
+        ToolType::Eraser => base * 2.0,
+    };
+
+    // Tapering: thin at start and end of stroke
+    let taper_len = (total as f64 * 0.15).max(3.0).min(12.0);
+    let taper = if (index as f64) < taper_len {
+        (index as f64 / taper_len).max(0.2)
+    } else if ((total - 1 - index) as f64) < taper_len {
+        ((total - 1 - index) as f64 / taper_len).max(0.2)
+    } else {
+        1.0
+    };
+
+    tool_width * taper
 }
 
 /// Render page template (lines, grid, dots)

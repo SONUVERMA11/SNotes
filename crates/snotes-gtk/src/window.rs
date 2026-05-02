@@ -566,30 +566,110 @@ fn build_toolbar(
     // Separator
     append_separator(&toolbar);
 
-    // ── Color buttons ──
-    let colors: Vec<(&str, Color, &str)> = vec![
-        ("⬛", Color::BLACK, "Black"),
-        ("🔴", Color::RED, "Red"),
-        ("🔵", Color::from_rgba(0.1, 0.3, 0.8, 1.0), "Blue"),
-        ("🟢", Color::from_rgba(0.1, 0.6, 0.2, 1.0), "Green"),
-        ("🟠", Color::from_rgba(0.9, 0.5, 0.0, 1.0), "Orange"),
-        ("🟣", Color::from_rgba(0.5, 0.1, 0.7, 1.0), "Purple"),
+    // ── Color swatches (proper drawn circles) ──
+    let preset_colors: Vec<(Color, &str)> = vec![
+        (Color::BLACK, "Black"),
+        (Color::from_rgba(0.2, 0.2, 0.2, 1.0), "Dark Gray"),
+        (Color::RED, "Red"),
+        (Color::from_rgba(0.85, 0.2, 0.1, 1.0), "Dark Red"),
+        (Color::from_rgba(0.1, 0.4, 0.9, 1.0), "Blue"),
+        (Color::from_rgba(0.0, 0.6, 0.3, 1.0), "Green"),
+        (Color::from_rgba(0.95, 0.55, 0.0, 1.0), "Orange"),
+        (Color::from_rgba(0.55, 0.15, 0.75, 1.0), "Purple"),
     ];
 
-    for (label, color, name) in colors {
-        let btn = gtk4::Button::builder()
-            .label(label)
+    for (color, name) in preset_colors {
+        let swatch = gtk4::DrawingArea::builder()
+            .width_request(24)
+            .height_request(24)
             .tooltip_text(name)
-            .css_classes(vec!["flat".to_string()])
+            .build();
+        let r = color.r as f64;
+        let g = color.g as f64;
+        let b = color.b as f64;
+        swatch.set_draw_func(move |_area, cr, w, h| {
+            let cx = w as f64 / 2.0;
+            let cy = h as f64 / 2.0;
+            let radius = 9.0;
+            // Filled circle
+            cr.arc(cx, cy, radius, 0.0, 2.0 * std::f64::consts::PI);
+            cr.set_source_rgb(r, g, b);
+            cr.fill().ok();
+            // Border
+            cr.arc(cx, cy, radius, 0.0, 2.0 * std::f64::consts::PI);
+            cr.set_source_rgba(1.0, 1.0, 1.0, 0.3);
+            cr.set_line_width(1.5);
+            cr.stroke().ok();
+        });
+
+        let swatch_btn = gtk4::Button::builder()
+            .child(&swatch)
+            .tooltip_text(name)
+            .css_classes(vec!["flat".to_string(), "color-swatch".to_string()])
             .build();
         let cs = canvas_state.clone();
         let da = canvas.clone();
-        btn.connect_clicked(move |_| {
+        swatch_btn.connect_clicked(move |_| {
             cs.borrow_mut().stroke_color = color;
             da.queue_draw();
         });
-        toolbar.append(&btn);
+        toolbar.append(&swatch_btn);
     }
+
+    // Custom color picker button via GTK4 ColorDialog
+    let custom_color_btn = gtk4::Button::builder()
+        .tooltip_text("Custom Color...")
+        .css_classes(vec!["flat".to_string()])
+        .build();
+    // Rainbow swatch for custom color
+    let rainbow_swatch = gtk4::DrawingArea::builder()
+        .width_request(24)
+        .height_request(24)
+        .build();
+    rainbow_swatch.set_draw_func(|_area, cr, w, h| {
+        let cx = w as f64 / 2.0;
+        let cy = h as f64 / 2.0;
+        let r = 9.0;
+        // Draw rainbow ring
+        for deg in 0..360 {
+            let angle = (deg as f64) * std::f64::consts::PI / 180.0;
+            let (rd, gd, bd) = hsv_to_rgb(deg as f64, 1.0, 1.0);
+            cr.set_source_rgb(rd, gd, bd);
+            cr.arc(cx, cy, r, angle, angle + 0.02);
+            cr.line_to(cx, cy);
+            cr.fill().ok();
+        }
+        // White center dot
+        cr.arc(cx, cy, 4.0, 0.0, 2.0 * std::f64::consts::PI);
+        cr.set_source_rgb(1.0, 1.0, 1.0);
+        cr.fill().ok();
+    });
+    custom_color_btn.set_child(Some(&rainbow_swatch));
+
+    let cs_custom = canvas_state.clone();
+    let da_custom = canvas.clone();
+    custom_color_btn.connect_clicked(move |btn| {
+        let dialog = gtk4::ColorDialog::builder()
+            .title("Pick a Color")
+            .modal(true)
+            .build();
+        let cs_c = cs_custom.clone();
+        let da_c = da_custom.clone();
+        let win = btn.root().and_then(|r| r.downcast::<gtk4::Window>().ok());
+        dialog.choose_rgba(win.as_ref(), None, None::<&gio::Cancellable>, move |result| {
+            if let Ok(rgba) = result {
+                let c = Color::from_rgba(
+                    rgba.red() as f32,
+                    rgba.green() as f32,
+                    rgba.blue() as f32,
+                    rgba.alpha() as f32,
+                );
+                cs_c.borrow_mut().stroke_color = c;
+                da_c.queue_draw();
+            }
+        });
+    });
+    toolbar.append(&custom_color_btn);
 
     append_separator(&toolbar);
 
@@ -702,4 +782,21 @@ fn build_app_menu() -> gio::Menu {
     menu.append_section(None, &app_section);
 
     menu
+}
+
+/// HSV to RGB conversion for rainbow color swatch
+fn hsv_to_rgb(h: f64, s: f64, v: f64) -> (f64, f64, f64) {
+    let c = v * s;
+    let hp = h / 60.0;
+    let x = c * (1.0 - (hp % 2.0 - 1.0).abs());
+    let (r1, g1, b1) = match hp as u32 {
+        0 => (c, x, 0.0),
+        1 => (x, c, 0.0),
+        2 => (0.0, c, x),
+        3 => (0.0, x, c),
+        4 => (x, 0.0, c),
+        _ => (c, 0.0, x),
+    };
+    let m = v - c;
+    (r1 + m, g1 + m, b1 + m)
 }
