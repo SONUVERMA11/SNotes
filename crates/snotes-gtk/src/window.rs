@@ -19,7 +19,7 @@ impl SNotesWindow {
         // Apply theme CSS
         let css_provider = gtk4::CssProvider::new();
         let theme_css = theme_manager.get_active().to_css();
-        css_provider.load_from_string(&theme_css);
+        css_provider.load_from_data(&theme_css);
         gtk4::style_context_add_provider_for_display(
             &gdk4::Display::default().unwrap(),
             &css_provider,
