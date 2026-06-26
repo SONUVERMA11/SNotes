@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="SNotes Banner" width="100%">
+</p>
+
 # S Notes
 
 > **Linux-native handwriting & annotation app** — modeled after GoodNotes 6
