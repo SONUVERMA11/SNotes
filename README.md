@@ -258,3 +258,8 @@ Plugins are compiled to WASM and run in a sandboxed Wasmtime environment. See `c
 This project is licensed under the [GPL-3.0-or-later](LICENSE) license.
 
 Copyright © 2026 [Sonu Verma](https://github.com/SONUVERMA11)
+
+
+---
+Made with ❤️ by [Sonu Verma](https://github.com/SONUVERMA11)
+
